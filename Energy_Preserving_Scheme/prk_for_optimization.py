@@ -64,7 +64,6 @@ def actual_A1_A2(A): # from the returned gradient array of 20 elements, we find 
 
     return A1, A2
 
-
 def One_D_to_TwoD(A):
     """
     Using a 1D array, returned by the function @actual_A_1D , making a lower triangular matrix A2D
@@ -74,20 +73,20 @@ def One_D_to_TwoD(A):
     """
     A = A.reshape(4, 4)
     return A
-
+@jit
 def f(y, z, alpha_values):
     return z
-
+@jit
 def g(y, z, alpha_values):
     alpha_values = alpha_values.transpose()
 
     return jnp.add(jnp.add((-1 * alpha_values[0]) , (-2 * alpha_values[1] * y) ) , jnp.add((-3 * alpha_values[2]* (y**2)) , (-4 * alpha_values[3] * (y**3) )) )
 
-
+@jit
 def Energy_Function(y, z):
     return (jnp.square(y) + jnp.square(z))/2
 
-
+@jit
 def PRK_step(y0 , z0, h, A1, A2, B1, B2, alpha_values):
     s = A1.shape[0]
     dim = jnp.size(y0)
@@ -99,7 +98,7 @@ def PRK_step(y0 , z0, h, A1, A2, B1, B2, alpha_values):
 
     # print("shape of yn and zn :",y0.shape, y0.shape)
     init_state = 0, K_new, L_new, K_old, L_old, alpha_values
-
+    @jit
     def body_while_loop(state):
         _, K_new, L_new, K_old, L_old, alpha_values = state
         K_old = K_new
@@ -107,7 +106,7 @@ def PRK_step(y0 , z0, h, A1, A2, B1, B2, alpha_values):
         K_new = f(y0+ h * A1 @ K_old, z0 + h * A2 @ L_old, alpha_values)
         L_new = g(y0+ h * A1 @ K_old, z0 + h * A2 @ L_old, alpha_values)
         return _, K_new, L_new, K_old, L_old, alpha_values
-
+    @jit
     def condition_while_loop(state):
         _, K_new, L_new, K_old, L_old, alpha_values = state
         norms = jnp.sum(jnp.array([jnp.linalg.norm(K_new - K_old) + jnp.linalg.norm(L_new - L_old)]))
@@ -118,6 +117,7 @@ def PRK_step(y0 , z0, h, A1, A2, B1, B2, alpha_values):
     zn = z0 + h * jnp.sum(jnp.multiply(B2, L_new))
     return yn, zn
 
+@jit
 def find_error(A1D, H_sequence):
 
     time_factor = 20
@@ -153,7 +153,7 @@ def find_error(A1D, H_sequence):
     h = time_factor/NN[i] #step size
     y = iy = y0
     z = iz = z0
-
+    @jit
     def fori_loop_1(i, state):
         yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values = state
         y, z = PRK_step(y, z, h, A1, A2, B1, B2, alpha_values)
@@ -163,7 +163,7 @@ def find_error(A1D, H_sequence):
         return state
     init_state_yz = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values
     yn_list, zn_list, what_y, what_z, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * NN[i], fori_loop_1, init_state_yz)
-
+    @jit
     def fori_loop_2(j, state):
         iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values = state
         iy, iz = PRK_step(iy, iz, h/istep, A1, A2, B1, B2, alpha_values)
