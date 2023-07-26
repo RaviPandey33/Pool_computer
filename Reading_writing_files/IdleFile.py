@@ -1,5 +1,5 @@
 file1 = open("data.txt","w")
-L = ["This is Delhi \n","This is Paris \n","This is London \n"]
+L = ["This is Delhi \n","This is Paris \n","This is London \n", "This is Bejing \n", "This is frankfurt \n"]
  
 # \n is placed to indicate EOL (End of Line)
 file1.write("Hello \n")
