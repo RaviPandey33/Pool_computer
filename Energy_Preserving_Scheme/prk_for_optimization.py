@@ -85,9 +85,10 @@ def One_D_to_TwoD(A):
     A = A.reshape(4, 4)
     return A
 
+@jit
 def f(y, z, alpha_values):
     return z
-
+@jit
 def g(y, z, alpha_values):
     # print("===================")
     # print(alpha_values.shape)
@@ -115,62 +116,8 @@ def g(y, z, alpha_values):
 def Energy_Function(y, z):
     return (jnp.square(y) + jnp.square(z))/2
 
-# from scipy.stats.distributions import alpha
-# # alpha_values = jnp.array([[1, 2, 3, 4],
-# #                           [0, 0, 0, 0]
-# #                           ])
-# # result = jnp.zeros_like(alpha_values) # Create an array of zeros with the same shape as alpha_values
-# # print(alpha_values.shape)
-# # print(result.shape)
-# # x = 2
-# # for i in range(0, 4):
-# #     print()
-# #     print(result)
-# #     result = result.at[0, i].set(-1 * (i + 1) * alpha_values[0][i] * (x ** i))
-# #     print(result)
-# #     print()
-# # print(result)
 
-# alpha_values = jnp.array([[1],
-#                           [2],
-#                           [3],
-#                           [4]])
-
-# y = jnp.array([[1],
-#                [2],
-#                [2],
-#                [3]])
-
-# # x = y.transpose()
-# # print("===========", x.shape)
-# # print(y.shape)
-# # print(alpha_values.shape)
-# # # print(jnp.add(-4 * alpha_values[1] * y ,  y))
-# # result = jnp.add(jnp.add((-1 * alpha_values[0]) , (-2 * alpha_values[1] * y) ) , jnp.add((-3 * alpha_values[2]* (y**2)) , (-4 * alpha_values[3] * (y**3) )) )
-# # print(result)
-
-# print(jnp.sum(jnp.multiply(y, alpha_values)))
-
-# def kk(y, z, alpha_values):
-#     x = y.transpose()
-#     print(x.shape, "Here iiiii")
-#     result = jnp.zeros_like(alpha_values)  # Create an array of zeros with the same shape as alpha_values
-#     for i in range(0, 4):
-#         print("Here am i :", alpha_values[i])
-#         result += -1 * (i + 1) * alpha_values[0][i] * x ** i
-
-#     return result.transpose()
-
-# a = jnp.array([[1, 2, 3, 4]])
-# yy = jnp.array([[1], [2], [3], [4]])
-# zz = jnp.array([[1], [2], [3], [4]])
-# print(a.shape)
-# print(yy.shape)
-# print(zz.shape)
-
-
-# kk(yy, zz, a)
-
+@jit
 def PRK_step(y0 , z0, h, A1, A2, B1, B2, alpha_values):
     s = A1.shape[0]
     dim = jnp.size(y0)
@@ -201,11 +148,23 @@ def PRK_step(y0 , z0, h, A1, A2, B1, B2, alpha_values):
     yn = y0 + h * jnp.sum(jnp.multiply(B1, K_new))
     zn = z0 + h * jnp.sum(jnp.multiply(B2, L_new))
 
-    # print("shape of yn and zn : ", yn.shape, zn.shape)
-    # print("Shape of B1 and K_new", B1.shape)
-    # print("Shape of B2 and L_new", L_new.shape)
-
     return yn, zn
+
+def fori_loop_1(i, state):
+    yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values, h, istep = state
+    y, z = PRK_step(y, z, h, A1, A2, B1, B2, alpha_values)
+    yn_list = yn_list.at[i].set(y.ravel())
+    zn_list = zn_list.at[i].set(z.ravel())
+    state = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values, h, istep
+    return state
+
+def fori_loop_2(j, state):
+    iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values, h, istep = state
+    iy, iz = PRK_step(iy, iz, h/istep, A1, A2, B1, B2, alpha_values)
+    iyn_list = iyn_list.at[j].set(iy.ravel())
+    izn_list = izn_list.at[j].set(iz.ravel())
+    state = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values, h, istep
+    return state
 
 def find_error(A1D, H_sequence):
     #converting A1D back to the original matrix form
@@ -219,7 +178,6 @@ def find_error(A1D, H_sequence):
 
     B1 = jnp.reshape(B1, (4, 1))
     B2 = jnp.reshape(B2, (4, 1))
-    # print("==== shape of B1, and B2 : ", B1.shape, B2.shape)
 
     alpha_values = jnp.reshape(jnp.array(H_sequence[:4]), (1, 4))
 
@@ -230,13 +188,9 @@ def find_error(A1D, H_sequence):
 
     istep = 10
     NN = jnp.array([40])
-    step_size_list_convergence = []
-    o_error_list_convergence = []
-    c_error_list_convergence = []
 
     i = 0
-    # for i in range(len(NN)):
-    # start of the for loop
+
     yn_list = jnp.zeros((time_factor * NN[i], 1))
     zn_list = jnp.zeros((time_factor * NN[i], 1))
     iyn_list = jnp.zeros((time_factor * istep * NN[i] , 1))
@@ -246,372 +200,18 @@ def find_error(A1D, H_sequence):
     h = time_factor/NN[i] #step size
     y = iy = y0
     z = iz = z0
+    
+    init_state_yz = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values, h, istep
+    yn_list, zn_list, _, _, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * NN[i], fori_loop_1, init_state_yz)
 
-    def fori_loop_1(i, state):
-        yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values = state
-        y, z = PRK_step(y, z, h, A1, A2, B1, B2, alpha_values)
-        yn_list = yn_list.at[i].set(y.ravel())
-        zn_list = zn_list.at[i].set(z.ravel())
-        state = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values
-        return state
-    init_state_yz = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values
-    yn_list, zn_list, what_y, what_z, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * NN[i], fori_loop_1, init_state_yz)
-    # print("--------- i am here ----------")
-    # # print(yn_list)
-    # # print(zn_list)
-    # print(what_y)
-    # print(what_z)
-
-
-    def fori_loop_2(j, state):
-        iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values = state
-        iy, iz = PRK_step(iy, iz, h/istep, A1, A2, B1, B2, alpha_values)
-        iyn_list = iyn_list.at[j].set(iy.ravel())
-        izn_list = izn_list.at[j].set(iz.ravel())
-        state = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values
-        return state
-    init_state_iyz = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values
-    iyn_list, izn_list, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * istep * NN[i], fori_loop_2, init_state_iyz) # time istep
+    init_state_iyz = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values, h, istep
+    iyn_list, izn_list, _, _, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * istep * NN[i], fori_loop_2, init_state_iyz) # time istep
     j1_iyn_list = iyn_list[9:istep*NN[i]:10]
     j2_izn_list = izn_list[9:istep*NN[i]:10]
 
-
     err1 = j1_iyn_list.ravel() - yn_list.ravel()
     err2 = j2_izn_list.ravel() - zn_list.ravel()
-    # print("zn_list :", zn_list)
-    # print("yn_list :", yn_list)
+
     final_error = (jnp.sum(jnp.abs(err1)) + jnp.sum(jnp.abs(err2))) / (2*NN[i])
 
-    # step_size_list_convergence.append(h)
-    # o_error_list_convergence.append(final_error)
-
-    # End of the for loop
-
-
-    # print(type(err1))
-    # print(type(err2))
-
     return jnp.sum(final_error) #, step_size_list_convergence, o_error_list_convergence
-
-# ### RK4 4th order Table
-# # A1 = A2 = jnp.array([
-# #      [0., 0., 0., 0.],
-# #      [1/2, 0., 0., 0.],
-# #      [0., 1/2, 0., 0.],
-# #      [0., 0., 1.0, 0.]])
-# # B1 = B2 = jnp.array([1/6, 1/3, 1/3, 1/6])
-
-
-# A1 = jnp.array([
-#      [0., 0., 0., 0.],
-#      [5/24, 1/3, -1/24, 0.],
-#      [1/6, 2/3, 1/6, 0.],
-#      [0., 0., 0., 0.]])
-# B1 = jnp.array([1/6, 2/3, 1/6, 0.])
-
-# A2 = jnp.array([
-#      [1/6, -1/6, 0., 0.],
-#      [1/6, 1/3, 0., 0.],
-#      [1/6, 5/6, 0., 0.],
-#      [0., 0., 0., 0.]])
-# B2 = jnp.array([1/6, 2/3, 1/6, 0.])
-
-
-# A1D = One_Dim_Matrix(A1)
-# A1D = Add_B_tomatrix_A(A1D, B1)
-# A2D = One_Dim_Matrix(A2)
-# A2D = Add_B_tomatrix_A(A2D, B2)
-# A1D = Add_B_tomatrix_A(A1D, A2D)
-
-# spacedim = [(-1., 1.),(-1., 1.),(-1., 1.),(-1., 1.),(-1., 1.),(-1., 1.) ]
-
-# space = Space(spacedim)
-# halton = Halton()
-# n = 10
-
-# halton_sequence = halton.generate(space, n)
-# halton_sequence = np.array(halton_sequence)
-# # print(halton_sequence)
-# # for i in range(10):
-# for i in range(1, n):
-#     err = find_error(A1D, halton_sequence[i])
-#     print("Error : ", err[0])
-#     # print(err[1])
-#     # print(err[2])
-
-# import matplotlib.pyplot as plt
-
-# # log_step_size_list_convergence = np.log(step_size_list_convergence)/np.log(10)
-# # log_error_list_convergence = np.log(error_list_convergence)/np.log(10)
-
-# # Convergence
-# plt.loglog(err[1], err[2], label = "Error", marker='o')
-# # plt.loglog(step_size_list_convergence, c_error_list_convergence, label = "Error",marker='s')
-
-# # plt.plot(step_size_list_convergence, error_list_convergence, label = "Error",marker='o')
-# plt.legend()
-# plt.grid()
-# plt.xlabel('Step Size')
-# plt.ylabel('Log Error')
-
-# c_error_list_convergence = [ 0.38497312006845197, 4.303331929694718e-05, 3.378751410277811e-09]
-# step_size_list_convergence = [1, 0.1, 0.01]
-
-# import matplotlib.pyplot as plt
-
-# # log_step_size_list_convergence = np.log(step_size_list_convergence)/np.log(10)
-# # log_error_list_convergence = np.log(error_list_convergence)/np.log(10)
-
-# # Convergence
-# # plt.loglog(step_size_list_convergence, o_error_list_convergence, label = "Error",marker='o')
-# plt.loglog(step_size_list_convergence, c_error_list_convergence, label = "Error",marker='s')
-
-# # plt.plot(step_size_list_convergence, error_list_convergence, label = "Error",marker='o')
-# plt.legend()
-# plt.grid()
-# plt.xlabel('Step Size')
-# plt.ylabel('Log Error')
-
-# time_factor = 10
-# t =  jnp.linspace(0.01, 1*time_factor, 100)
-# s = jnp.sin(t)
-
-# plt.plot(t, s, label = "original",marker='s')
-
-
-
-
-
-
-## Commented the earlier code ;
-
-
-# from jax.config import config
-# config.update("jax_enable_x64", True)  #double precision
-
-# import numpy as np
-# from jax import jit
-# import jax
-
-# import jax.numpy as jnp
-# import numpy as np
-# from skopt.space import Space
-# from skopt.sampler import Halton
-# from jax import jacfwd
-# from jax import grad, jit, vmap, pmap
-# from jax._src.lax.utils import (
-#     _argnum_weak_type,
-#     _input_dtype,
-#     standard_primitive,
-# )
-# from jax._src.lax import lax
-
-# def One_Dim_Matrix(A):
-#     """
-#     We use this function to convert a 2D array into a 1D array containing only the lower triangular matrix of the 2D array.
-#     : param A : a 2D array
-#     : return : a 1D array
-#     """
-    
-#     dim_x, dim_y = A.shape
-#     #print(dim_x, dim_y)
-#     A = A.reshape(1, (dim_x * dim_y))
-#     return A
-
-
-# def Add_B_tomatrix_A(A, b):
-#     """
-#     Given 2 1D arrays this function appends the second array at the end of first array.
-#     : param A : 1D array
-#     : param b : 1D array
-#     : return : 1D array after appending array b to A
-
-#     """
-#     A = jnp.append(A,b)
-#     return A
-
-
-# def actual_A_1D(A):
-#     """
-#     This function takes in a 1D array and breaks it into 2 arrays.
-#     : param A : 1D array
-#     : return A_new : 1D array of length = 10
-#     : return b1 : 1D array of length = 4
-
-#     """
-
-#     b1 = A[16:20]
-#     A_new = A[0:16]
-#     return A_new, b1
-
-
-# def actual_A1_A2(A): # from the returned gradient array of 20 elements, we find the elements of array A and array B
-#                     # first 16 elemets belong to lower triangular elements of array A and 4 belongs to B
-#     A1 = A[0:20]
-#     A2 = A[20:40]
-
-#     return A1, A2
-
-
-# def One_D_to_TwoD(A):
-#     """
-#     Using a 1D array, returned by the function @actual_A_1D , making a lower triangular matrix A2D
-#     : param A : 1D array of length = 10
-#     : return : 2D array
-
-#     """
-#     A = A.reshape(4, 4)
-#     return A
-
-# def f(y, z, alpha_values):
-#     return z
-
-# def g(y, z, alpha_values):
-#     # print("===================")
-#     # print(alpha_values.shape)
-#     # print(y.shape)
-#     # x = y.transpose()
-#     # print(x.shape)
-#     alpha_values = alpha_values.transpose()
-#     # print("~~~~~~~~~~~~~~~~~~~~~$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$", jnp.add(jnp.add((-1 * alpha_values[0]) , (-2 * alpha_values[1] * y) ) , jnp.add((-3 * alpha_values[2]* (y**2)) , (-4 * alpha_values[3] * (y**3) )) ).shape)
-#     # result = jnp.zeros((1, 4)) # Create an array of zeros with the same shape as alpha_values
-
-#     # for i in range(0, 4):
-
-#     #     result = result.at[0, i].set(-1 * (i + 1) * alpha_values[0][i] * (y ** i))
-
-#     # print("result +++++++++++++++=================== ", result)
-
-#     return jnp.add(jnp.add((-1 * alpha_values[0]) , (-2 * alpha_values[1] * y) ) , jnp.add((-3 * alpha_values[2]* (y**2)) , (-4 * alpha_values[3] * (y**3) )) )
-
-# # def f(y, z, alpha_values):
-# #     return z
-
-# # def g(y, z, alpha_values):
-# #     return -y
-
-# def Energy_Function(y, z):
-#     return (jnp.square(y) + jnp.square(z))/2
-
-
-# def PRK_step(y0 , z0, h, A1, A2, B1, B2, alpha_values):
-#     s = A1.shape[0]
-#     dim = jnp.size(y0)
-#     tol = 10**(-10)
-#     K_old = jnp.zeros((s,dim))
-#     L_old = jnp.zeros((s,dim))
-#     # print("+++++++++++++++++++++ Shape of K_old = ", K_old.shape)
-#     K_new = f((y0+ h*A1 @ K_old), (z0+ h*A2 @ L_old), alpha_values)
-#     L_new = g((y0+ h*A1 @ K_old), (z0+ h*A2 @ L_old), alpha_values)
-
-#     # print("shape of yn and zn :",y0.shape, y0.shape)
-#     init_state = 0, K_new, L_new, K_old, L_old, alpha_values
-
-#     def body_while_loop(state):
-#         _, K_new, L_new, K_old, L_old, alpha_values = state
-#         K_old = K_new
-#         L_old = L_new
-#         K_new = f(y0+ h * A1 @ K_old, z0 + h * A2 @ L_old, alpha_values)
-#         L_new = g(y0+ h * A1 @ K_old, z0 + h * A2 @ L_old, alpha_values)
-#         return _, K_new, L_new, K_old, L_old, alpha_values
-
-#     def condition_while_loop(state):
-#         _, K_new, L_new, K_old, L_old, alpha_values = state
-#         norms = jnp.sum(jnp.array([jnp.linalg.norm(K_new - K_old) + jnp.linalg.norm(L_new - L_old)]))
-#         return norms > tol
-
-#     _, K_new, L_new, K_old, L_old, alpha_values = jax.lax.while_loop(condition_while_loop, body_while_loop, init_state)
-#     yn = y0 + h * jnp.sum(jnp.multiply(B1, K_new))
-#     zn = z0 + h * jnp.sum(jnp.multiply(B2, L_new))
-
-#     # print("shape of yn and zn : ", yn.shape, zn.shape)
-#     # print("Shape of B1 and K_new", B1.shape)
-#     # print("Shape of B2 and L_new", L_new.shape)
-
-#     return yn, zn
-
-# def find_error(A1D, H_sequence):
-#     #converting A1D back to the original matrix form
-
-#     time_factor = 1
-#     a1, a2 = actual_A1_A2(A1D) #, H_sequence
-#     a1,B1 = actual_A_1D(a1)
-#     A1 = One_D_to_TwoD(a1)
-#     a2,B2 = actual_A_1D(a2)
-#     A2 = One_D_to_TwoD(a2)
-
-#     B1 = jnp.reshape(B1, (4, 1))
-#     B2 = jnp.reshape(B2, (4, 1))
-#     # print("==== shape of B1, and B2 : ", B1.shape, B2.shape)
-
-#     alpha_values = jnp.reshape(jnp.array(H_sequence[:4]), (1, 4))
-
-#     time_factor = 1 # default
-
-#     y0 = jnp.reshape(jnp.array(H_sequence[4]), (1, 1)) # jnp.zeros((1,1)) #
-#     z0 = jnp.reshape(jnp.array(H_sequence[5]), (1, 1)) # jnp.ones((1,1)) #
-
-#     istep = 10
-#     NN = jnp.array([40])
-#     step_size_list_convergence = []
-#     o_error_list_convergence = []
-#     c_error_list_convergence = []
-
-#     i = 0
-#     # for i in range(len(NN)):
-#     # start of the for loop
-#     yn_list = jnp.zeros((time_factor * NN[i], 1))
-#     zn_list = jnp.zeros((time_factor * NN[i], 1))
-#     iyn_list = jnp.zeros((time_factor * istep * NN[i] , 1))
-#     izn_list = jnp.zeros((time_factor * istep * NN[i] , 1))
-
-#     yn = zn = iyn = izn = []
-#     h = time_factor/NN[i] #step size
-#     y = iy = y0
-#     z = iz = z0
-
-#     def fori_loop_1(i, state):
-#         yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values = state
-#         y, z = PRK_step(y, z, h, A1, A2, B1, B2, alpha_values)
-#         yn_list = yn_list.at[i].set(y.ravel())
-#         zn_list = zn_list.at[i].set(z.ravel())
-#         state = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values
-#         return state
-#     init_state_yz = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values
-#     yn_list, zn_list, what_y, what_z, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * NN[i], fori_loop_1, init_state_yz)
-#     # print("--------- i am here ----------")
-#     # # print(yn_list)
-#     # # print(zn_list)
-#     # print(what_y)
-#     # print(what_z)
-
-
-#     def fori_loop_2(j, state):
-#         iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values = state
-#         iy, iz = PRK_step(iy, iz, h/istep, A1, A2, B1, B2, alpha_values)
-#         iyn_list = iyn_list.at[j].set(iy.ravel())
-#         izn_list = izn_list.at[j].set(iz.ravel())
-#         state = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values
-#         return state
-#     init_state_iyz = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values
-#     iyn_list, izn_list, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * istep * NN[i], fori_loop_2, init_state_iyz) # time istep
-#     j1_iyn_list = iyn_list[9:istep*NN[i]:10]
-#     j2_izn_list = izn_list[9:istep*NN[i]:10]
-
-
-#     err1 = j1_iyn_list.ravel() - yn_list.ravel()
-#     err2 = j2_izn_list.ravel() - zn_list.ravel()
-#     # print("zn_list :", zn_list)
-#     # print("yn_list :", yn_list)
-#     final_error = (jnp.sum(jnp.abs(err1)) + jnp.sum(jnp.abs(err2))) / (2*NN[i])
-
-#     # step_size_list_convergence.append(h)
-#     # o_error_list_convergence.append(final_error)
-
-#     # End of the for loop
-
-
-#     # print(type(err1))
-#     # print(type(err2))
-
-#     return jnp.sum(final_error) #, step_size_list_convergence, o_error_list_convergence
