@@ -85,36 +85,27 @@ def One_D_to_TwoD(A):
     A = A.reshape(4, 4)
     return A
 
-@jit
-def f(y, z, alpha_values):
-    return z
-@jit
-def g(y, z, alpha_values):
-    # print("===================")
-    # print(alpha_values.shape)
-    # print(y.shape)
-    # x = y.transpose()
-    # print(x.shape)
-    alpha_values = alpha_values.transpose()
-    # print("~~~~~~~~~~~~~~~~~~~~~$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$", jnp.add(jnp.add((-1 * alpha_values[0]) , (-2 * alpha_values[1] * y) ) , jnp.add((-3 * alpha_values[2]* (y**2)) , (-4 * alpha_values[3] * (y**3) )) ).shape)
-    # result = jnp.zeros((1, 4)) # Create an array of zeros with the same shape as alpha_values
-
-    # for i in range(0, 4):
-
-    #     result = result.at[0, i].set(-1 * (i + 1) * alpha_values[0][i] * (y ** i))
-
-    # print("result +++++++++++++++=================== ", result)
-
-    return jnp.add(jnp.add((-1 * alpha_values[0]) , (-2 * alpha_values[1] * y) ) , jnp.add((-3 * alpha_values[2]* (y**2)) , (-4 * alpha_values[3] * (y**3) )) )
-
+# @jit
 # def f(y, z, alpha_values):
 #     return z
-
+# @jit
 # def g(y, z, alpha_values):
-#     return -y
+#     alpha_values = alpha_values.transpose()
+#     return jnp.add(jnp.add((-1 * alpha_values[0]) , (-2 * alpha_values[1] * y) ) , jnp.add((-3 * alpha_values[2]* (y**2)) , (-4 * alpha_values[3] * (y**3) )) )
 
-def Energy_Function(y, z):
+# def Energy_Function(y, z, alpha_values):
+#     return ((jnp.square(y))/2 + jnp.add(jnp.add(( alpha_values[0]* (z)) , (alpha_values[1] * (z**2)) ) , jnp.add((alpha_values[2]* (z**3)) , (alpha_values[3] * (z**4) )) )) 
+
+
+def f(y, z, alpha_values):
+    return z
+
+def g(y, z, alpha_values):
+    return -y
+
+def Energy_Function(y, z, alpha_values):
     return (jnp.square(y) + jnp.square(z))/2
+
 
 
 @jit
@@ -169,7 +160,7 @@ def fori_loop_2(j, state):
 def find_error(A1D, H_sequence):
     #converting A1D back to the original matrix form
 
-    time_factor = 20
+    time_factor = 1
     a1, a2 = actual_A1_A2(A1D) #, H_sequence
     a1,B1 = actual_A_1D(a1)
     A1 = One_D_to_TwoD(a1)
@@ -187,7 +178,9 @@ def find_error(A1D, H_sequence):
     z0 = jnp.reshape(jnp.array(H_sequence[5]), (1, 1)) # jnp.ones((1,1)) #
 
     istep = 10
-    NN = jnp.array([40])
+    NN = jnp.array([10]) 
+    ## This is for the step size. h denotes the steps size
+    ## istep is the smaller steps. in our case istep = 10.
 
     i = 0
 
@@ -201,8 +194,12 @@ def find_error(A1D, H_sequence):
     y = iy = y0
     z = iz = z0
     
+    # remember making fori loop inside this function makes it slow. Dont know why though.
     init_state_yz = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values, h, istep
     yn_list, zn_list, _, _, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * NN[i], fori_loop_1, init_state_yz)
+    
+    H = Energy_Function(yn_list, zn_list, alpha_values) # H should be of type list
+    energy_error = jnp.sum(jnp.square(H - H[0])) / len(H) # Hamiltonian Error
 
     init_state_iyz = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values, h, istep
     iyn_list, izn_list, _, _, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * istep * NN[i], fori_loop_2, init_state_iyz) # time istep
@@ -214,4 +211,4 @@ def find_error(A1D, H_sequence):
 
     final_error = (jnp.sum(jnp.abs(err1)) + jnp.sum(jnp.abs(err2))) / (2*NN[i])
 
-    return jnp.sum(final_error) #, step_size_list_convergence, o_error_list_convergence
+    return jnp.sum(final_error) + energy_error #, step_size_list_convergence, o_error_list_convergence
