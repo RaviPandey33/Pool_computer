@@ -1,3 +1,4 @@
+import jax
 from jax.config import config
 config.update("jax_enable_x64", True) 
 
@@ -103,7 +104,7 @@ compute_error_batched = jax.vmap(compute_error_single, in_axes=(None, 0))
 error_list_1 = [] 
 error_list_2 = []
 tot_error = 0
-for k in trange(1000):
+for k in trange(10):
     tot_error = 0
 
     for batch_idx in range(0, len(flat_halton_sequence), batch_size):

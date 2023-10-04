@@ -157,7 +157,7 @@ def fori_loop_2(j, state):
     state = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values, h, istep
     return state
 
-def find_error(A1D, H_sequence):
+def find_error(A1D, H_sequence, step = 10):
     #converting A1D back to the original matrix form
 
     time_factor = 1
@@ -178,37 +178,32 @@ def find_error(A1D, H_sequence):
     z0 = jnp.reshape(jnp.array(H_sequence[5]), (1, 1)) # jnp.ones((1,1)) #
 
     istep = 10
-    NN = jnp.array([10]) 
-    ## This is for the step size. h denotes the steps size
-    ## istep is the smaller steps. in our case istep = 10.
 
-    i = 0
-
-    yn_list = jnp.zeros((time_factor * NN[i], 1))
-    zn_list = jnp.zeros((time_factor * NN[i], 1))
-    iyn_list = jnp.zeros((time_factor * istep * NN[i] , 1))
-    izn_list = jnp.zeros((time_factor * istep * NN[i] , 1))
+    yn_list = jnp.zeros((time_factor * step, 1))
+    zn_list = jnp.zeros((time_factor * step, 1))
+    iyn_list = jnp.zeros((time_factor * istep *step , 1))
+    izn_list = jnp.zeros((time_factor * istep * step , 1))
 
     yn = zn = iyn = izn = []
-    h = time_factor/NN[i] #step size
+    h = time_factor/step #step size
     y = iy = y0
     z = iz = z0
     
     # remember making fori loop inside this function makes it slow. Dont know why though.
     init_state_yz = yn_list, zn_list, y, z, A1, A2, B1, B2, alpha_values, h, istep
-    yn_list, zn_list, _, _, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * NN[i], fori_loop_1, init_state_yz)
+    yn_list, zn_list, _, _, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * step, fori_loop_1, init_state_yz)
     
     H = Energy_Function(yn_list, zn_list, alpha_values) # H should be of type list
     energy_error = jnp.sum(jnp.square(H - H[0])) / len(H) # Hamiltonian Error
 
     init_state_iyz = iyn_list, izn_list, iy, iz, A1, A2, B1, B2, alpha_values, h, istep
-    iyn_list, izn_list, _, _, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * istep * NN[i], fori_loop_2, init_state_iyz) # time istep
-    j1_iyn_list = iyn_list[9:istep*NN[i]:10]
-    j2_izn_list = izn_list[9:istep*NN[i]:10]
+    iyn_list, izn_list, _, _, _, _, _, _, _, _, _ = jax.lax.fori_loop(0, time_factor * istep * step, fori_loop_2, init_state_iyz) # time istep
+    j1_iyn_list = iyn_list[9:istep*step:10]
+    j2_izn_list = izn_list[9:istep*step:10]
 
     err1 = j1_iyn_list.ravel() - yn_list.ravel()
     err2 = j2_izn_list.ravel() - zn_list.ravel()
 
-    final_error = (jnp.sum(jnp.abs(err1)) + jnp.sum(jnp.abs(err2))) / (2*NN[i])
+    final_error = (jnp.sum(jnp.abs(err1)) + jnp.sum(jnp.abs(err2))) / (2*step)
 
     return jnp.sum(final_error) + energy_error #, step_size_list_convergence, o_error_list_convergence
