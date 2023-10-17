@@ -1,3 +1,9 @@
+print("Hello")
+import numpy
+import jax.numpy as jnp
+
+print("Hello")
+
 def One_Dim_Matrix(A):
     """
     We use this function to convert a 2D array into a 1D array containing only the lower triangular matrix of the 2D array.
@@ -67,8 +73,8 @@ def actual_A1_A2(A): # from the returned gradient array of 20 elements, we find 
                     # first 16 elemets belong to lower triangular elements of array A and 4 belongs to B
     A1 = A[0:20]
     A2 = A[20:40]
-    H_sequence = A[40:]
-    return A1, A2, H_sequence
+    #H_sequence = A[40:]
+    return A1, A2 #, H_sequence
 
 def PRKactual_A1_A2(A): # from the returned gradient array of 20 elements, we find the elements of array A and array B
                     # first 16 elemets belong to lower triangular elements of array A and 4 belongs to B
