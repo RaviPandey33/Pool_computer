@@ -19,7 +19,7 @@ def One_Dim_Matrix(A):
 
     """
     dim_x, dim_y = A.shape
-    #print(dim_x, dim_y)
+    print(dim_x, dim_y)
     A = A.reshape(1, (dim_x * dim_y))
     return A
 
